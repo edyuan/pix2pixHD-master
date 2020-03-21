@@ -4,50 +4,13 @@
 
 # pix2pixHD
 ### [Project](https://tcwang0509.github.io/pix2pixHD/) | [Youtube](https://youtu.be/3AIpPlzM_qs) | [Paper](https://arxiv.org/pdf/1711.11585.pdf) <br>
+Edwin's version of Pix2pixHD with modifications to options and testing.
+
 Pytorch implementation of our method for high-resolution (e.g. 2048x1024) photorealistic image-to-image translation. It can be used for turning semantic label maps into photo-realistic images or synthesizing portraits from face label maps. <br><br>
 [High-Resolution Image Synthesis and Semantic Manipulation with Conditional GANs](https://tcwang0509.github.io/pix2pixHD/)  
  [Ting-Chun Wang](https://tcwang0509.github.io/)<sup>1</sup>, [Ming-Yu Liu](http://mingyuliu.net/)<sup>1</sup>, [Jun-Yan Zhu](http://people.eecs.berkeley.edu/~junyanz/)<sup>2</sup>, Andrew Tao<sup>1</sup>, [Jan Kautz](http://jankautz.com/)<sup>1</sup>, [Bryan Catanzaro](http://catanzaro.name/)<sup>1</sup>  
  <sup>1</sup>NVIDIA Corporation, <sup>2</sup>UC Berkeley  
  In CVPR 2018.  
-
-## Image-to-image translation at 2k/1k resolution
-- Our label-to-streetview results
-<p align='center'>  
-  <img src='imgs/teaser_label.png' width='400'/>
-  <img src='imgs/teaser_ours.jpg' width='400'/>
-</p>
-- Interactive editing results
-<p align='center'>  
-  <img src='imgs/teaser_style.gif' width='400'/>
-  <img src='imgs/teaser_label.gif' width='400'/>
-</p>
-- Additional streetview results
-<p align='center'>
-  <img src='imgs/cityscapes_1.jpg' width='400'/>
-  <img src='imgs/cityscapes_2.jpg' width='400'/>
-</p>
-<p align='center'>
-  <img src='imgs/cityscapes_3.jpg' width='400'/>
-  <img src='imgs/cityscapes_4.jpg' width='400'/>
-</p>
-
-- Label-to-face and interactive editing results
-<p align='center'>
-  <img src='imgs/face1_1.jpg' width='250'/>
-  <img src='imgs/face1_2.jpg' width='250'/>
-  <img src='imgs/face1_3.jpg' width='250'/>
-</p>
-<p align='center'>
-  <img src='imgs/face2_1.jpg' width='250'/>
-  <img src='imgs/face2_2.jpg' width='250'/>
-  <img src='imgs/face2_3.jpg' width='250'/>
-</p>
-
-- Our editing interface
-<p align='center'>
-  <img src='imgs/city_short.gif' width='330'/>
-  <img src='imgs/face_short.gif' width='450'/>
-</p>
 
 ## Prerequisites
 - Linux or macOS
