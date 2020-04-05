@@ -1,8 +1,10 @@
+datasets/
 debug*
 checkpoints/
 results/
 build/
 dist/
+imgs/
 torch.egg-info/
 */**/__pycache__
 torch/version.py
@@ -38,3 +40,5 @@ test/.coverage
 test/data/legacy_serialized.pt
 *.DS_Store
 *~
+_config.yml
+

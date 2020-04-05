@@ -21,6 +21,10 @@ visualizer = Visualizer(opt)
 # create website
 web_dir = os.path.join(opt.results_dir, opt.name, '%s_%s' % (opt.phase, opt.which_epoch))
 webpage = html.HTML(web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.which_epoch))
+# create directory for saved features
+feats_dir = opt.results_dir + '/' + opt.name + '/feats'
+if not os.path.exists(feats_dir):
+    os.makedirs(feats_dir)
 
 # test
 if not opt.engine and not opt.onnx:
@@ -51,17 +55,17 @@ for i, data in enumerate(dataset):
                           opt.export_onnx, verbose=True)
         exit(0)
     minibatch = 1 
+    img_path = data['path']
     if opt.engine:
         generated = run_trt_engine(opt.engine, minibatch, [data['label'], data['inst']])
     elif opt.onnx:
         generated = run_onnx(opt.onnx, opt.data_type, minibatch, [data['label'], data['inst']])
     else:        
-        generated = model.inference(data['label'], data['inst'], data['image'])
+        generated = model.inference(data['label'], data['inst'], data['image'], opt.save_feats, img_path, feats_dir)
         
     visuals = OrderedDict([('input_label', util.tensor2label(data['label'][0], opt.label_nc)),
                            ('synthesized_image', util.tensor2im(generated.data[0])),
                            ('real_image', util.tensor2im(data['image'][0]))])
-    img_path = data['path']
     print('process image... %s' % img_path)
     visualizer.save_images(webpage, visuals, img_path)
 

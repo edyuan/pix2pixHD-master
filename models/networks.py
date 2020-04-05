@@ -3,6 +3,7 @@ import torch.nn as nn
 import functools
 from torch.autograd import Variable
 import numpy as np
+import scipy.io as scipy
 
 ###############################################################################
 # Functions
@@ -207,8 +208,11 @@ class GlobalGenerator(nn.Module):
         model += [nn.ReflectionPad2d(3), nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0), nn.Tanh()]        
         self.model = nn.Sequential(*model)
             
-    def forward(self, input):
-        return self.model(input)             
+    def forward(self, input, save_feats=False, img_path=None, feats_dir=None):
+        if save_feats:
+            feats = np.squeeze(self.model[:25](input).cpu().data.numpy())
+            scipy.savemat(feats_dir + '/' + img_path[0].split('/')[-1][:-4] + '.mat', {'feats' : feats})
+        return self.model(input)  
         
 # Define a resnet block
 class ResnetBlock(nn.Module):
@@ -316,7 +320,7 @@ class MultiscaleDiscriminator(nn.Module):
         else:
             return [model(input)]
 
-    def forward(self, input):        
+    def forward(self, input):
         num_D = self.num_D
         result = []
         input_downsampled = input
