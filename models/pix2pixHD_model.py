@@ -32,9 +32,9 @@ class Pix2PixHDModel(BaseModel):
             netG_input_nc += 1
         if self.use_features:
             netG_input_nc += opt.feat_num                  
-        self.netG = networks.define_G(netG_input_nc, opt.output_nc, opt.ngf, opt.netG, 
+        self.netG = networks.define_G(opt.fineSize, opt.loadSize, netG_input_nc, opt.output_nc, opt.ngf, opt.netG, 
                                       opt.n_downsample_global, opt.n_blocks_global, opt.n_local_enhancers, 
-                                      opt.n_blocks_local, opt.norm, gpu_ids=self.gpu_ids)        
+                                      opt.n_blocks_local, opt.norm, opt.inject_noise, gpu_ids=self.gpu_ids)        
 
         # Discriminator network
         if self.isTrain:
@@ -47,7 +47,7 @@ class Pix2PixHDModel(BaseModel):
 
         ### Encoder network
         if self.gen_features:          
-            self.netE = networks.define_G(opt.output_nc, opt.feat_num, opt.nef, 'encoder', 
+            self.netE = networks.define_G(opt.fineSize, opt.loadSize, opt.output_nc, opt.feat_num, opt.nef, 'encoder', 
                                           opt.n_downsample_E, norm=opt.norm, gpu_ids=self.gpu_ids)  
         if self.opt.verbose:
                 print('---------- Networks initialized -------------')

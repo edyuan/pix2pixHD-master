@@ -45,10 +45,11 @@ class BaseOptions():
         self.parser.add_argument('--netG', type=str, default='global', help='selects model to use for netG')
         self.parser.add_argument('--ngf', type=int, default=64, help='# of gen filters in first conv layer')
         self.parser.add_argument('--n_downsample_global', type=int, default=4, help='number of downsampling layers in netG') 
-        self.parser.add_argument('--n_blocks_global', type=int, default=18, help='number of residual blocks in the global generator network')
+        self.parser.add_argument('--n_blocks_global', type=int, default=9, help='number of residual blocks in the global generator network')
         self.parser.add_argument('--n_blocks_local', type=int, default=3, help='number of residual blocks in the local enhancer network')
         self.parser.add_argument('--n_local_enhancers', type=int, default=1, help='number of local enhancers to use')        
         self.parser.add_argument('--niter_fix_global', type=int, default=0, help='number of epochs that we only train the outmost local enhancer')        
+        self.parser.add_argument('--inject_noise', action='store_false', help='if true, injections noise before each norm layer of the generator') 
 
         # for instance-wise features
         self.parser.add_argument('--no_instance', action='store_false', help='if specified, do *not* add instance map as input')        

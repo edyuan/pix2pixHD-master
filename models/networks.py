@@ -25,14 +25,12 @@ def get_norm_layer(norm_type='instance'):
         raise NotImplementedError('normalization layer [%s] is not found' % norm_type)
     return norm_layer
 
-def define_G(input_nc, output_nc, ngf, netG, n_downsample_global=3, n_blocks_global=9, n_local_enhancers=1, 
-             n_blocks_local=3, norm='instance', gpu_ids=[]):    
+def define_G(fineSize, loadSize, input_nc, output_nc, ngf, netG, n_downsample_global=3, n_blocks_global=9, n_local_enhancers=1, n_blocks_local=3, norm='instance', inject_noise=False, gpu_ids=[]):    
     norm_layer = get_norm_layer(norm_type=norm)     
     if netG == 'global':    
-        netG = GlobalGenerator(input_nc, output_nc, ngf, n_downsample_global, n_blocks_global, norm_layer)       
+        netG = GlobalGenerator(fineSize, loadSize, input_nc, output_nc, ngf, n_downsample_global, n_blocks_global, norm_layer, inject_noise)       
     elif netG == 'local':        
-        netG = LocalEnhancer(input_nc, output_nc, ngf, n_downsample_global, n_blocks_global, 
-                                  n_local_enhancers, n_blocks_local, norm_layer)
+        netG = LocalEnhancer(fineSize, loadSize, input_nc, output_nc, ngf, n_downsample_global, n_blocks_global, n_local_enhancers, n_blocks_local, norm_layer, inject_noise)
     elif netG == 'encoder':
         netG = Encoder(input_nc, output_nc, ngf, n_downsample_global, norm_layer)
     else:
@@ -128,8 +126,8 @@ class VGGLoss(nn.Module):
 # Generator
 ##############################################################################
 class LocalEnhancer(nn.Module):
-    def __init__(self, input_nc, output_nc, ngf=32, n_downsample_global=3, n_blocks_global=9, 
-                 n_local_enhancers=1, n_blocks_local=3, norm_layer=nn.BatchNorm2d, padding_type='reflect'):        
+    def __init__(self, fineSize, loadSize, input_nc, output_nc, ngf=32, n_downsample_global=3, n_blocks_global=9, 
+                 n_local_enhancers=1, n_blocks_local=3, norm_layer=nn.BatchNorm2d, inject_noise=False, padding_type='reflect'):        
         super(LocalEnhancer, self).__init__()
         self.n_local_enhancers = n_local_enhancers
         
@@ -182,7 +180,7 @@ class LocalEnhancer(nn.Module):
         return output_prev
 
 class GlobalGenerator(nn.Module):
-    def __init__(self, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d, 
+    def __init__(self, fineSize, loadSize, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d, inject_noise=False,
                  padding_type='reflect'):
         assert(n_blocks >= 0)
         super(GlobalGenerator, self).__init__()        
@@ -203,8 +201,13 @@ class GlobalGenerator(nn.Module):
         ### upsample         
         for i in range(n_downsampling):
             mult = 2**(n_downsampling - i)
-            model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2), kernel_size=3, stride=2, padding=1, output_padding=1),
-                       norm_layer(int(ngf * mult / 2)), activation]
+            model += [nn.ConvTranspose2d(ngf * mult, int(ngf * mult / 2), kernel_size=3, stride=2, padding=1, output_padding=1)]
+            shape = self.get_x_shape(fineSize, loadSize, input_nc, nn.Sequential(*model))
+            if inject_noise:
+                 model += [NoiseInjection(shape), norm_layer(int(ngf * mult / 2)), activation]
+            else:
+                 model += [norm_layer(int(ngf * mult / 2)), activation]
+
         model += [nn.ReflectionPad2d(3), nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0), nn.Tanh()]        
         self.model = nn.Sequential(*model)
             
@@ -213,7 +216,35 @@ class GlobalGenerator(nn.Module):
             feats = np.squeeze(self.model[:25](input).cpu().data.numpy())
             scipy.savemat(feats_dir + '/' + img_path[0].split('/')[-1][:-4] + '.mat', {'feats' : feats})
         return self.model(input)  
-        
+
+    def get_x_shape(self, fineSize, loadSize, input_nc, model):
+        input_X = torch.zeros([1, input_nc, fineSize, loadSize]) #NCHW
+        output = model(input_X)
+        return output.shape
+
+
+# Define noise injection layer
+class NoiseInjection(nn.Module):
+    def __init__(self, shape):
+        super(NoiseInjection, self).__init__()
+        #self.register_buffer('noise', torch.randn([shape[0], 1, shape[2] , shape[3]]))
+        self.injected_noise = nn.Parameter(self.build_noise_injection(shape))
+
+    def build_noise_injection(self, shape):
+        noise =  torch.randn([shape[0], 1, shape[2] , shape[3]], requires_grad=False) #NCHW
+        self.register_buffer('reg_noise', noise)
+        weights = nn.Parameter(torch.zeros([1, shape[1], 1 , 1])) # different weight for each channel
+        noise_weighted = weights * self.reg_noise
+        return noise_weighted
+
+    def forward(self,x):
+        out = x + self.injected_noise
+        #print('x shape: ', x.shape)
+        #print('noise shape: ', self.injected_noise.shape)
+        #print('out shape: ', out.shape)
+        #print('\n')
+        return out
+
 # Define a resnet block
 class ResnetBlock(nn.Module):
     def __init__(self, dim, padding_type, norm_layer, activation=nn.ReLU(True), use_dropout=False):
