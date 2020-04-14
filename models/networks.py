@@ -25,12 +25,12 @@ def get_norm_layer(norm_type='instance'):
         raise NotImplementedError('normalization layer [%s] is not found' % norm_type)
     return norm_layer
 
-def define_G(fineSize, loadSize, input_nc, output_nc, ngf, netG, n_downsample_global=3, n_blocks_global=9, n_local_enhancers=1, n_blocks_local=3, norm='instance', inject_noise=False, gpu_ids=[]):    
+def define_G(fineSize, loadSize, input_nc, output_nc, ngf, netG, n_downsample_global=3, n_blocks_global=9, n_local_enhancers=1, n_blocks_local=3, norm='instance', inject_noise=False, blur_pool=False, gpu_ids=[]):    
     norm_layer = get_norm_layer(norm_type=norm)     
     if netG == 'global':    
-        netG = GlobalGenerator(fineSize, loadSize, input_nc, output_nc, ngf, n_downsample_global, n_blocks_global, norm_layer, inject_noise)       
+        netG = GlobalGenerator(fineSize, loadSize, input_nc, output_nc, ngf, n_downsample_global, n_blocks_global, norm_layer, inject_noise, blur_pool)       
     elif netG == 'local':        
-        netG = LocalEnhancer(fineSize, loadSize, input_nc, output_nc, ngf, n_downsample_global, n_blocks_global, n_local_enhancers, n_blocks_local, norm_layer, inject_noise)
+        netG = LocalEnhancer(fineSize, loadSize, input_nc, output_nc, ngf, n_downsample_global, n_blocks_global, n_local_enhancers, n_blocks_local, norm_layer, inject_noise, blur_pool)
     elif netG == 'encoder':
         netG = Encoder(input_nc, output_nc, ngf, n_downsample_global, norm_layer)
     else:
@@ -42,9 +42,9 @@ def define_G(fineSize, loadSize, input_nc, output_nc, ngf, netG, n_downsample_gl
     netG.apply(weights_init)
     return netG
 
-def define_D(input_nc, ndf, n_layers_D, norm='instance', use_sigmoid=False, num_D=1, getIntermFeat=False, gpu_ids=[]):        
+def define_D(fineSize, loadSize, input_nc, ndf, n_layers_D, norm='instance', use_sigmoid=False, num_D=1, getIntermFeat=False, blur_pool=False, gpu_ids=[]):        
     norm_layer = get_norm_layer(norm_type=norm)   
-    netD = MultiscaleDiscriminator(input_nc, ndf, n_layers_D, norm_layer, use_sigmoid, num_D, getIntermFeat)   
+    netD = MultiscaleDiscriminator(fineSize, loadSize, input_nc, ndf, n_layers_D, norm_layer, use_sigmoid, num_D, getIntermFeat, blur_pool)   
     print(netD)
     if len(gpu_ids) > 0:
         assert(torch.cuda.is_available())
@@ -125,15 +125,16 @@ class VGGLoss(nn.Module):
 ##############################################################################
 # Generator
 ##############################################################################
+# blurpool and noise injection not implemented!!
 class LocalEnhancer(nn.Module):
     def __init__(self, fineSize, loadSize, input_nc, output_nc, ngf=32, n_downsample_global=3, n_blocks_global=9, 
-                 n_local_enhancers=1, n_blocks_local=3, norm_layer=nn.BatchNorm2d, inject_noise=False, padding_type='reflect'):        
+                 n_local_enhancers=1, n_blocks_local=3, norm_layer=nn.BatchNorm2d, inject_noise=False, blur_pool=False, padding_type='reflect'):        
         super(LocalEnhancer, self).__init__()
         self.n_local_enhancers = n_local_enhancers
         
         ###### global generator model #####           
         ngf_global = ngf * (2**n_local_enhancers)
-        model_global = GlobalGenerator(input_nc, output_nc, ngf_global, n_downsample_global, n_blocks_global, norm_layer).model        
+        model_global = GlobalGenerator(input_nc, output_nc, ngf_global, n_downsample_global, n_blocks_global, norm_layer, inject_noise, blur_pool).model        
         model_global = [model_global[i] for i in range(len(model_global)-3)] # get rid of final convolution layers        
         self.model = nn.Sequential(*model_global)                
 
@@ -180,18 +181,21 @@ class LocalEnhancer(nn.Module):
         return output_prev
 
 class GlobalGenerator(nn.Module):
-    def __init__(self, fineSize, loadSize, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d, inject_noise=False,
-                 padding_type='reflect'):
+    def __init__(self, fineSize, loadSize, input_nc, output_nc, ngf=64, n_downsampling=3, n_blocks=9, norm_layer=nn.BatchNorm2d, inject_noise=False, blur_pool=False, padding_type='reflect'):
         assert(n_blocks >= 0)
         super(GlobalGenerator, self).__init__()        
-        activation = nn.ReLU(True)        
+        activation = nn.ReLU(True)    
+        block_stride = 1 if blur_pool else 2
+        outpad_pad = 0 if blur_pool else 1
 
         model = [nn.ReflectionPad2d(3), nn.Conv2d(input_nc, ngf, kernel_size=7, padding=0), norm_layer(ngf), activation]
         ### downsample
         for i in range(n_downsampling):
             mult = 2**i
-            model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3, stride=2, padding=1),
+            model += [nn.Conv2d(ngf * mult, ngf * mult * 2, kernel_size=3, stride=block_stride, padding=1),
                       norm_layer(ngf * mult * 2), activation]
+            if blur_pool:
+                 model += [Blurpool_down(filt_size=3, channels=ngf * mult * 2)]
 
         ### resnet blocks
         mult = 2**n_downsampling
@@ -207,9 +211,15 @@ class GlobalGenerator(nn.Module):
                  model += [NoiseInjection(shape), norm_layer(int(ngf * mult / 2)), activation]
             else:
                  model += [norm_layer(int(ngf * mult / 2)), activation]
-
+            #if blur_pool:
+                 #model += [Blurpool_up(filt_size=2, channels=int(ngf * mult / 2), stride=1)]
+            #shape = self.get_x_shape(fineSize, loadSize, input_nc, nn.Sequential(*model))
+            #print(shape)
+            
+             
         model += [nn.ReflectionPad2d(3), nn.Conv2d(ngf, output_nc, kernel_size=7, padding=0), nn.Tanh()]        
         self.model = nn.Sequential(*model)
+        
             
     def forward(self, input, save_feats=False, img_path=None, feats_dir=None):
         if save_feats:
@@ -221,6 +231,96 @@ class GlobalGenerator(nn.Module):
         input_X = torch.zeros([1, input_nc, fineSize, loadSize]) #NCHW
         output = model(input_X)
         return output.shape
+
+
+class Blurpool_up(nn.Module):
+    def __init__(self, filt_size=3, pad_type='reflect', stride=2, channels=None, pad_off=0):
+        super(Blurpool_up, self).__init__()
+        self.filt_size = filt_size
+        self.pad_off = pad_off
+        self.pad_sizes = [int(1.*(filt_size-1)/2), int(np.ceil(1.*(filt_size-1)/2)), int(1.*(filt_size-1)/2), int(np.ceil(1.*(filt_size-1)/2))]
+        self.pad_sizes = [pad_size+pad_off for pad_size in self.pad_sizes]
+        self.stride = stride
+        self.off = int((self.stride-1)/2.)
+        self.channels = channels
+
+        # print('Filter size [%i]'%filt_size)
+        if(self.filt_size==1):
+            a = np.array([1.,])
+        elif(self.filt_size==2):
+            a = np.array([1., 1.])
+        elif(self.filt_size==3):
+            a = np.array([1., 2., 1.])
+        elif(self.filt_size==4):    
+            a = np.array([1., 3., 3., 1.])
+        elif(self.filt_size==5):    
+            a = np.array([1., 4., 6., 4., 1.])
+
+        filt = torch.Tensor(a[:,None]*a[None,:])
+        filt = filt/torch.sum(filt)
+        self.register_buffer('filt', filt[None,None,:,:].repeat((self.channels,1,1,1)))
+
+        self.pad = get_pad_layer(pad_type)(self.pad_sizes)
+
+    def forward(self, inp):
+        #if(self.filt_size==1):
+        #    if(self.pad_off==0):
+        #        return inp[:,:,::self.stride,::self.stride]    
+        #    else:
+        #        return self.pad(inp)[:,:,::self.stride,::self.stride]
+        #else:
+        #return nn.functional.conv_transpose2d(inp, self.filt, stride=self.stride, output_padding=0, groups=inp.shape[1])
+        return nn.functional.conv2d(self.pad(inp), self.filt, stride=self.stride, groups=inp.shape[1])
+
+
+class Blurpool_down(nn.Module):
+    def __init__(self, filt_size=3, pad_type='reflect', stride=2, channels=None, pad_off=0):
+        super(Blurpool_down, self).__init__()
+        self.filt_size = filt_size
+        self.pad_off = pad_off
+        self.pad_sizes = [int(1.*(filt_size-1)/2), int(np.ceil(1.*(filt_size-1)/2)), int(1.*(filt_size-1)/2), int(np.ceil(1.*(filt_size-1)/2))]
+        self.pad_sizes = [pad_size+pad_off for pad_size in self.pad_sizes]
+        self.stride = stride
+        self.off = int((self.stride-1)/2.)
+        self.channels = channels
+
+        # print('Filter size [%i]'%filt_size)
+        if(self.filt_size==1):
+            a = np.array([1.,])
+        elif(self.filt_size==2):
+            a = np.array([1., 1.])
+        elif(self.filt_size==3):
+            a = np.array([1., 2., 1.])
+        elif(self.filt_size==4):    
+            a = np.array([1., 3., 3., 1.])
+        elif(self.filt_size==5):    
+            a = np.array([1., 4., 6., 4., 1.])
+
+        filt = torch.Tensor(a[:,None]*a[None,:])
+        filt = filt/torch.sum(filt)
+        self.register_buffer('filt', filt[None,None,:,:].repeat((self.channels,1,1,1)))
+
+        self.pad = get_pad_layer(pad_type)(self.pad_sizes)
+
+    def forward(self, inp):
+        #if(self.filt_size==1):
+        #    if(self.pad_off==0):
+        #        return inp[:,:,::self.stride,::self.stride]    
+        #    else:
+        #        return self.pad(inp)[:,:,::self.stride,::self.stride]
+        #else:
+        return nn.functional.conv2d(self.pad(inp), self.filt, stride=self.stride, groups=inp.shape[1])
+
+def get_pad_layer(pad_type):
+    if(pad_type in ['refl','reflect']):
+        PadLayer = nn.ReflectionPad2d
+    elif(pad_type in ['repl','replicate']):
+        PadLayer = nn.ReplicationPad2d
+    elif(pad_type=='zero'):
+        PadLayer = nn.ZeroPad2d
+    else:
+        print('Pad type [%s] not recognized'%pad_type)
+    return PadLayer
 
 
 # Define noise injection layer
@@ -325,22 +425,25 @@ class Encoder(nn.Module):
         return outputs_mean
 
 class MultiscaleDiscriminator(nn.Module):
-    def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, 
-                 use_sigmoid=False, num_D=3, getIntermFeat=False):
+    def __init__(self, fineSize, loadSize, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, 
+                 use_sigmoid=False, num_D=3, getIntermFeat=False, blur_pool=False):
         super(MultiscaleDiscriminator, self).__init__()
         self.num_D = num_D
         self.n_layers = n_layers
         self.getIntermFeat = getIntermFeat
      
         for i in range(num_D):
-            netD = NLayerDiscriminator(input_nc, ndf, n_layers, norm_layer, use_sigmoid, getIntermFeat)
+            netD = NLayerDiscriminator(fineSize, loadSize, input_nc, ndf, n_layers, norm_layer, use_sigmoid, getIntermFeat, blur_pool)
             if getIntermFeat:                                
                 for j in range(n_layers+2):
                     setattr(self, 'scale'+str(i)+'_layer'+str(j), getattr(netD, 'model'+str(j)))                                   
             else:
                 setattr(self, 'layer'+str(i), netD.model)
 
-        self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
+        if blur_pool:
+            self.downsample = Blurpool_down(filt_size=3, channels = input_nc)
+        else:
+            self.downsample = nn.AvgPool2d(3, stride=2, padding=[1, 1], count_include_pad=False)
 
     def singleD_forward(self, model, input):
         if self.getIntermFeat:
@@ -367,23 +470,31 @@ class MultiscaleDiscriminator(nn.Module):
         
 # Defines the PatchGAN discriminator with the specified arguments.
 class NLayerDiscriminator(nn.Module):
-    def __init__(self, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False, getIntermFeat=False):
+    def __init__(self, fineSize, loadSize, input_nc, ndf=64, n_layers=3, norm_layer=nn.BatchNorm2d, use_sigmoid=False, getIntermFeat=False, blur_pool=False):
         super(NLayerDiscriminator, self).__init__()
         self.getIntermFeat = getIntermFeat
         self.n_layers = n_layers
 
         kw = 4
-        padw = int(np.ceil((kw-1.0)/2))
-        sequence = [[nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw), nn.LeakyReLU(0.2, True)]]
+        block_stride = 1 if blur_pool else 2
+        padw = int(np.ceil((kw-1.0)/2))-1 if blur_pool else int(np.ceil((kw-1.0)/2))
+
+        temp = [nn.Conv2d(input_nc, ndf, kernel_size=kw, stride=block_stride, padding=padw), nn.LeakyReLU(0.2, True)]
+        if blur_pool:
+                 temp += [Blurpool_down(filt_size=kw, channels = ndf)]
+        sequence = [temp]
 
         nf = ndf
         for n in range(1, n_layers):
             nf_prev = nf
             nf = min(nf * 2, 512)
-            sequence += [[
-                nn.Conv2d(nf_prev, nf, kernel_size=kw, stride=2, padding=padw),
+            temp = [
+                nn.Conv2d(nf_prev, nf, kernel_size=kw, stride=block_stride, padding=padw),
                 norm_layer(nf), nn.LeakyReLU(0.2, True)
-            ]]
+            ]
+            if blur_pool:
+                temp += [Blurpool_down(filt_size=kw, channels = nf)]
+            sequence += [temp]
 
         nf_prev = nf
         nf = min(nf * 2, 512)
@@ -392,7 +503,6 @@ class NLayerDiscriminator(nn.Module):
             norm_layer(nf),
             nn.LeakyReLU(0.2, True)
         ]]
-
         sequence += [[nn.Conv2d(nf, 1, kernel_size=kw, stride=1, padding=padw)]]
 
         if use_sigmoid:
@@ -415,7 +525,12 @@ class NLayerDiscriminator(nn.Module):
                 res.append(model(res[-1]))
             return res[1:]
         else:
-            return self.model(input)        
+            return self.model(input)   
+
+    def get_x_shape(self, fineSize, loadSize, input_nc, model):
+        input_X = torch.zeros([1, input_nc, fineSize, loadSize]) #NCHW
+        output = model(input_X)
+        return output.shape     
 
 from torchvision import models
 class Vgg19(torch.nn.Module):
