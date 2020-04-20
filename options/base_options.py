@@ -42,7 +42,7 @@ class BaseOptions():
         self.parser.add_argument('--tf_log', action='store_true', help='if specified, use tensorboard logging. Requires tensorflow installed')
 
         # network features
-        self.parser.add_argument('--blur_pool', action='store_false', help='if true, use blurpool operation to get rid of aliasing') 
+        self.parser.add_argument('--blur_pool', action='store_true', help='if true, use blurpool operation to get rid of aliasing') 
 
         # for generator
         self.parser.add_argument('--netG', type=str, default='global', help='selects model to use for netG')

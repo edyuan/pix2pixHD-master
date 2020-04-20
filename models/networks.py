@@ -223,8 +223,18 @@ class GlobalGenerator(nn.Module):
             
     def forward(self, input, save_feats=False, img_path=None, feats_dir=None):
         if save_feats:
-            feats = np.squeeze(self.model[:25](input).cpu().data.numpy())
-            scipy.savemat(feats_dir + '/' + img_path[0].split('/')[-1][:-4] + '.mat', {'feats' : feats})
+            # w/ blurpool, layers 8, 12, 16, 20, 29
+            # baseline,    layers 7, 10, 13, 16, 25
+            import os
+            feat_layers = [7,10,13,16,25]
+            for layer_num in feat_layers:
+                layer_name = '/layer' + str(layer_num)
+                
+                if not os.path.exists(feats_dir + layer_name):
+                    os.makedirs(feats_dir + layer_name)
+
+                feats = np.squeeze(self.model[:layer_num](input).cpu().data.numpy()) # set layer here
+                scipy.savemat(feats_dir + layer_name + '/' + img_path[0].split('/')[-1][:-4] + '.mat', {'feats' : feats})
         return self.model(input)  
 
     def get_x_shape(self, fineSize, loadSize, input_nc, model):
@@ -300,8 +310,8 @@ class Blurpool_down(nn.Module):
         filt = filt/torch.sum(filt)
         self.register_buffer('filt', filt[None,None,:,:].repeat((self.channels,1,1,1)))
 
-        self.pad = get_pad_layer(pad_type)(self.pad_sizes)
-
+        self.pad = get_pad_layer(pad_type)(self.pad_sizes) #pad_sizes = 1
+  
     def forward(self, inp):
         #if(self.filt_size==1):
         #    if(self.pad_off==0):

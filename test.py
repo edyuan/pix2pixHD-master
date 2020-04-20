@@ -18,13 +18,15 @@ opt.no_flip = True  # no flip
 data_loader = CreateDataLoader(opt)
 dataset = data_loader.load_data()
 visualizer = Visualizer(opt)
-# create website
-web_dir = os.path.join(opt.results_dir, opt.name, '%s_%s' % (opt.phase, opt.which_epoch))
-webpage = html.HTML(web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.which_epoch))
+# extract name of dataset
+dataroot = opt.dataroot.split('/')[-1]
 # create directory for saved features
-feats_dir = opt.results_dir + '/' + opt.name + '/feats'
+feats_dir = opt.results_dir + '/' + opt.name + '/' + dataroot + '/feats'
 if not os.path.exists(feats_dir):
     os.makedirs(feats_dir)
+# create website
+web_dir = os.path.join(opt.results_dir, opt.name, dataroot, '%s_%s' % (opt.phase, opt.which_epoch))
+webpage = html.HTML(web_dir, 'Experiment = %s, Phase = %s, Epoch = %s' % (opt.name, opt.phase, opt.which_epoch))
 
 # test
 if not opt.engine and not opt.onnx:
