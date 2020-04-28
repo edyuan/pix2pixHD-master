@@ -67,9 +67,9 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         save_fake = total_steps % opt.display_freq == display_delta
 
         ############## Forward Pass ######################
-        losses, generated = model(Variable(data['label']), Variable(data['inst']), 
+        losses, generated, probabilities = model(Variable(data['label']), Variable(data['inst']), 
             Variable(data['image']), Variable(data['feat']), infer=save_fake)
-
+        
         # sum per device losses
         losses = [ torch.mean(x) if not isinstance(x, int) else x for x in losses ]
         loss_dict = dict(zip(model.module.loss_names, losses))
@@ -94,7 +94,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         else:
             loss_D.backward()        
         optimizer_D.step()        
-
+       
         ############## Display results and errors ##########
         ### print out errors
         if total_steps % opt.print_freq == print_delta:
@@ -102,6 +102,7 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
             t = (time.time() - iter_start_time) / opt.print_freq
             visualizer.print_current_errors(epoch, epoch_iter, errors, t)
             visualizer.plot_current_errors(errors, total_steps)
+            visualizer.save_current_probs(epoch, epoch_iter, probabilities, t) 
             #call(["nvidia-smi", "--format=csv", "--query-gpu=memory.used,memory.free"]) 
 
         ### display output images

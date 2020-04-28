@@ -161,18 +161,27 @@ class Pix2PixHDModel(BaseModel):
         else:
             input_concat = input_label
         fake_image = self.netG.forward(input_concat)
+        
+        prob_dict = []
 
         # Fake Detection and Loss
         pred_fake_pool = self.discriminate(input_label, fake_image, use_pool=True)
-        loss_D_fake = self.criterionGAN(pred_fake_pool, False)        
+        loss_D_fake, prob_D_fake = self.criterionGAN(pred_fake_pool, False) 
+        prob_dict += [('D_fake_'+str(i),prob_D_fake[i]) for i in range(len(prob_D_fake))]
+        #print('loss_D_fake: ', prob_D_fake[0], prob_D_fake[1])         
 
         # Real Detection and Loss        
         pred_real = self.discriminate(input_label, real_image)
-        loss_D_real = self.criterionGAN(pred_real, True)
+        loss_D_real, prob_D_real = self.criterionGAN(pred_real, True)
+        prob_dict += [('D_real_'+str(i),prob_D_real[i]) for i in range(len(prob_D_real))]
+        #print('loss_D_real: ', loss_D_real)       
 
         # GAN loss (Fake Passability Loss)        
         pred_fake = self.netD.forward(torch.cat((input_label, fake_image), dim=1))        
-        loss_G_GAN = self.criterionGAN(pred_fake, True)               
+        loss_G_GAN, prob_G_GAN = self.criterionGAN(pred_fake, True)  
+        prob_dict += [('G_GAN_'+str(i),prob_G_GAN[i]) for i in range(len(prob_G_GAN))]
+        #print('loss_G_GAN: ', loss_G_GAN)     
+        #print('################')               
         
         # GAN feature matching loss
         loss_G_GAN_Feat = 0
@@ -190,7 +199,9 @@ class Pix2PixHDModel(BaseModel):
             loss_G_VGG = self.criterionVGG(fake_image, real_image) * self.opt.lambda_feat
         
         # Only return the fake_B image if necessary to save BW
-        return [ self.loss_filter( loss_G_GAN, loss_G_GAN_Feat, loss_G_VGG, loss_D_real, loss_D_fake ), None if not infer else fake_image ]
+        return [ self.loss_filter( loss_G_GAN, loss_G_GAN_Feat, loss_G_VGG, loss_D_real, loss_D_fake ) \
+                   , None if not infer else fake_image \
+                   , dict(prob_dict)]
 
     def inference(self, label, inst, image=None, save_feats=False, img_path=None, feats_dir=None):
         # Encode Inputs        

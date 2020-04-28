@@ -97,16 +97,21 @@ class GANLoss(nn.Module):
         return target_tensor
 
     def __call__(self, input, target_is_real):
+        probabilities = []
         if isinstance(input[0], list):
             loss = 0
             for input_i in input:
+                
+                #print(input_i[-1].shape)  #shapes are [1,1,87,131] and [1,1,45,67]
                 pred = input_i[-1]
                 target_tensor = self.get_target_tensor(pred, target_is_real)
                 loss += self.loss(pred, target_tensor)
-            return loss
+                probabilities.append(pred.mean().cpu())
+            return loss, probabilities
         else:            
             target_tensor = self.get_target_tensor(input[-1], target_is_real)
-            return self.loss(input[-1], target_tensor)
+            probabilities.append(input[-1].mean().cpu())
+            return self.loss(input[-1], target_tensor), probabilities
 
 class VGGLoss(nn.Module):
     def __init__(self, gpu_ids):
@@ -226,7 +231,7 @@ class GlobalGenerator(nn.Module):
             # w/ blurpool, layers 8, 12, 16, 20, 29
             # baseline,    layers 7, 10, 13, 16, 25
             import os
-            feat_layers = [7,10,13,16,25]
+            feat_layers = [8,12,16,20,29]
             for layer_num in feat_layers:
                 layer_name = '/layer' + str(layer_num)
                 

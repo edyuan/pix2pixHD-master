@@ -29,9 +29,13 @@ class Visualizer():
             print('create web directory %s...' % self.web_dir)
             util.mkdirs([self.web_dir, self.img_dir])
         self.log_name = os.path.join(opt.checkpoints_dir, opt.name, 'loss_log.txt')
+        self.prob_log_name = os.path.join(opt.checkpoints_dir, opt.name, 'prob_log.txt')
         with open(self.log_name, "a") as log_file:
             now = time.strftime("%c")
             log_file.write('================ Training Loss (%s) ================\n' % now)
+        with open(self.prob_log_name, "a") as prob_log_file:
+            now = time.strftime("%c")
+            prob_log_file.write('================ Probability Log (%s) ==============\n' % now)
 
     # |visuals|: dictionary of images to display or save
     def display_current_results(self, visuals, epoch, step):
@@ -108,6 +112,15 @@ class Visualizer():
         print(message)
         with open(self.log_name, "a") as log_file:
             log_file.write('%s\n' % message)
+
+    # errors: same format as |errors| of plotCurrentErrors
+    def save_current_probs(self, epoch, i, probs, t):
+        message = '(epoch: %d, iters: %d, time: %.3f) ' % (epoch, i, t)
+        for k, v in probs.items():
+            if v != 0:
+                message += '%s: %.3f ' % (k, v)
+        with open(self.prob_log_name, "a") as prob_log_file:
+            prob_log_file.write('%s\n' % message)
 
     # save image to the disk
     def save_images(self, webpage, visuals, image_path):
