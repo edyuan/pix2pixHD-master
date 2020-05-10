@@ -28,6 +28,7 @@ class BaseOptions():
         self.parser.add_argument('--label_nc', type=int, default=0, help='# of input label channels')
         self.parser.add_argument('--input_nc', type=int, default=3, help='# of input image channels')
         self.parser.add_argument('--output_nc', type=int, default=3, help='# of output image channels')
+        self.parser.add_argument('--two_and_half_D', type=int, default=False, help='# of output image channels')
 
         # for setting inputs
         self.parser.add_argument('--dataroot', type=str, default='./datasets/cityscapes/') 
@@ -66,7 +67,7 @@ class BaseOptions():
 
         self.initialized = True
 
-    def parse(self, save=True):
+    def parse(self):
         if not self.initialized:
             self.initialize()
         self.opt = self.parser.parse_args()
@@ -83,6 +84,9 @@ class BaseOptions():
         if len(self.opt.gpu_ids) > 0:
             torch.cuda.set_device(self.opt.gpu_ids[0])
 
+        return self.opt
+
+    def save(self):
         args = vars(self.opt)
 
         print('------------ Options -------------')
@@ -93,11 +97,11 @@ class BaseOptions():
         # save to the disk        
         expr_dir = os.path.join(self.opt.checkpoints_dir, self.opt.name)
         util.mkdirs(expr_dir)
-        if save and not self.opt.continue_train:
+        if not self.opt.continue_train:
             file_name = os.path.join(expr_dir, 'opt.txt')
             with open(file_name, 'wt') as opt_file:
                 opt_file.write('------------ Options -------------\n')
                 for k, v in sorted(args.items()):
                     opt_file.write('%s: %s\n' % (str(k), str(v)))
                 opt_file.write('-------------- End ----------------\n')
-        return self.opt
+

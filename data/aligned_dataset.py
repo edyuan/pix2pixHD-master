@@ -2,6 +2,7 @@ import os.path
 from data.base_dataset import BaseDataset, get_params, get_transform, normalize
 from data.image_folder import make_dataset
 from PIL import Image
+import torch
 
 class AlignedDataset(BaseDataset):
     def initialize(self, opt):
@@ -12,6 +13,23 @@ class AlignedDataset(BaseDataset):
         dir_A = '_A' if self.opt.label_nc == 0 else '_label'
         self.dir_A = os.path.join(opt.dataroot, opt.phase + dir_A)
         self.A_paths = sorted(make_dataset(self.dir_A))
+        
+        if self.A_paths[0].split('/')[-1][0] == '0': # new dataset format
+             opt.two_and_half_D = True
+             opt.input_nc = max([int(a.split('_')[-1][0]) for a in self.A_paths])
+             os.path.join(opt.dataroot, opt.phase + dir_A + '')
+             unique_paths = [p for p in self.A_paths if '_1.' in p]
+
+             self.A_paths = []
+             for p in unique_paths:
+                 temp = []
+                 for i in range(opt.input_nc):
+                     newpath = '_'.join(p.split('_')[:-1]) + '_' + str(i+1) + '.jpg'
+                     temp.append(newpath)                 
+    
+                 self.A_paths.append(temp)
+             #for p in self.A_paths:
+             #    print(p)
 
         ### input B (real images)
         dir_B = '_B' if self.opt.label_nc == 0 else '_img'
@@ -29,19 +47,35 @@ class AlignedDataset(BaseDataset):
             print('----------- loading features from %s ----------' % self.dir_feat)
             self.feat_paths = sorted(make_dataset(self.dir_feat))
 
-        self.dataset_size = len(self.A_paths) 
+        self.dataset_size = len(self.B_paths) 
       
     def __getitem__(self, index):        
         ### input A (label maps)
-        A_path = self.A_paths[index]              
-        A = Image.open(A_path)        
-        params = get_params(self.opt, A.size)
-        if self.opt.label_nc == 0:
-            transform_A = get_transform(self.opt, params)
-            A_tensor = transform_A(A.convert('RGB'))
+        A_path = self.A_paths[index]
+        if not self.opt.two_and_half_D: # place in list if not 2.5D to match format
+            A_path = [A_path]
+
+        A_tensor_list = []
+        for A_slice_path in A_path:
+            A = Image.open(A_slice_path)        
+            params = get_params(self.opt, A.size)
+            if self.opt.label_nc == 0:
+                transform_A = get_transform(self.opt, params)
+                A_tensor_list.append(transform_A(A.convert('RGB'))) #A_tensor shape is 3, 672, 1024
+            else:
+                transform_A = get_transform(self.opt, params, method=Image.NEAREST, normalize=False)
+                A_tensor_list.append(transform_A(A) * 255.0)
+
+        # create tensor
+        A_tensor = torch.zeros([self.opt.input_nc, A_tensor_list[0].shape[1], A_tensor_list[0].shape[2]])        
+
+        if self.opt.input_nc != len(A_tensor_list):
+            assert len(A_tensor_list) == 1, "# of images not 1 and mismatch with opt.input_nc"
+            for i in range(self.opt.input_nc):
+                A_tensor[i,:,:] = A_tensor_list[0][0,:,:]
         else:
-            transform_A = get_transform(self.opt, params, method=Image.NEAREST, normalize=False)
-            A_tensor = transform_A(A) * 255.0
+            for i, a_tensor in enumerate(A_tensor_list):
+                A_tensor[i,:,:] = a_tensor[0,:,:]
 
         B_tensor = inst_tensor = feat_tensor = 0
         ### input B (real images)

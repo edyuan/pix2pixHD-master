@@ -14,7 +14,8 @@ from models.models import create_model
 import util.util as util
 from util.visualizer import Visualizer
 
-opt = TrainOptions().parse()
+opt_obj = TrainOptions()
+opt = opt_obj.parse()
 iter_path = os.path.join(opt.checkpoints_dir, opt.name, 'iter.txt')
 if opt.continue_train:
     try:
@@ -53,6 +54,9 @@ display_delta = total_steps % opt.display_freq
 print_delta = total_steps % opt.print_freq
 save_delta = total_steps % opt.save_latest_freq
 
+# save options
+opt_obj.save()
+
 for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
     epoch_start_time = time.time()
     if epoch != start_epoch:
@@ -78,6 +82,9 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
         loss_D = (loss_dict['D_fake'] + loss_dict['D_real']) * 0.5
         loss_G = loss_dict['G_GAN'] + loss_dict.get('G_GAN_Feat',0) + loss_dict.get('G_VGG',0)
 
+        # save current probs
+        t = (time.time() - iter_start_time) / opt.print_freq
+        visualizer.save_current_probs(epoch, epoch_iter, probabilities, t) 
         ############### Backward Pass ####################
         # update generator weights
         optimizer_G.zero_grad()
@@ -102,7 +109,6 @@ for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
             t = (time.time() - iter_start_time) / opt.print_freq
             visualizer.print_current_errors(epoch, epoch_iter, errors, t)
             visualizer.plot_current_errors(errors, total_steps)
-            visualizer.save_current_probs(epoch, epoch_iter, probabilities, t) 
             #call(["nvidia-smi", "--format=csv", "--query-gpu=memory.used,memory.free"]) 
 
         ### display output images
